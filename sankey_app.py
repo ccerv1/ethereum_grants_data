@@ -52,24 +52,20 @@ def make_sankey_graph(
     df, 
     cat_cols=CAT_COLS, 
     value_col=FUND_COL,
-    size=12,
+    size=10,
     height=1000,
-    decimals=True,
+    decimals=False,
     hide_label_cols=[]):
 
-    # handle emply set case
-    if df.shape[0] == 0:
+    # handle empty dataframe case
+    if not len(df):
         return {}
-    
-    line_width = .5
 
-    # make the Sankey
+    # populate the Sankey data
     labelList = []
     nodeLabelList = []
-    colorNumList = []
     for catCol in cat_cols:
         labelListTemp = list(set(df[catCol].values))        
-        colorNumList.append(len(labelListTemp))
         labelList = labelList + labelListTemp
         if catCol in hide_label_cols:
             nodeLabelList = nodeLabelList + [""] * len(labelListTemp)
@@ -98,9 +94,10 @@ def make_sankey_graph(
     for c in cat_cols:
         linkLabels += [c] * df[c].nunique()
 
-    # creating the sankey diagram
+    # create the Sankey diagram
     pad = 15
     node_thickness = 10
+    line_width = .5
     data = dict(
         type='sankey',
         orientation='h',
@@ -128,8 +125,7 @@ def make_sankey_graph(
                 "<extra></extra>"
             ])
         )
-      )
-
+    )
     layout = dict(
         font=dict(size=size), 
         height=height
