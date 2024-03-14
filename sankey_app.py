@@ -52,19 +52,16 @@ def make_sankey_graph(
     df, 
     cat_cols=CAT_COLS, 
     value_col=FUND_COL,
-    main_color="purple",
-    med_color="teal",
-    light_color="green",
-    width=1000, 
-    height=1200, 
     size=12,
+    height=1000,
     decimals=True,
     hide_label_cols=[]):
 
-    # build the title info
-    total = df[value_col].sum()
-    max_nodes = max(df[cat_cols].nunique())
-    line_width = min(.5, (height / max_nodes / 50))
+    # handle emply set case
+    if df.shape[0] == 0:
+        return {}
+    
+    line_width = .5
 
     # make the Sankey
     labelList = []
@@ -81,12 +78,6 @@ def make_sankey_graph(
 
     # remove duplicates from labelList
     labelList = list(dict.fromkeys(labelList))
-
-    # define colors based on number of categories
-    colorPalette = [main_color, med_color, light_color]
-    colorList = []
-    for idx, colorNum in enumerate(colorNumList):
-        colorList = colorList + [colorPalette[idx]]*colorNum
 
     # transform df into a source-target pair
     for i in range(len(cat_cols)-1):
@@ -117,9 +108,8 @@ def make_sankey_graph(
         arrangement='freeform',
         node=dict(
           thickness=node_thickness,
-          line=dict(color=main_color, width=line_width), 
+          line=dict(width=line_width), 
           label=nodeLabelList,
-          color=colorList,
           customdata=linkLabels,
           hovertemplate="<br>".join([
                 "<b>%{value:,.1f}</b>" if decimals else "<b>%{value:,.0f}</b>",
@@ -140,12 +130,8 @@ def make_sankey_graph(
         )
       )
 
-    xpad = ((node_thickness+pad)/2)/width
-    xpos = np.linspace(xpad, 1-xpad, len(cat_cols))
-
     layout = dict(
-        font=dict(color=main_color, size=size), 
-        autosize=True,
+        font=dict(size=size), 
         height=height
     )
     fig = dict(data=[data], layout=layout)
@@ -160,7 +146,7 @@ data_load_state.text('Loading data...done!')
 
 total_funding = data['funding_usd'].sum()
 st.subheader(f'Total grant funding: ${total_funding:,.0f}')
-st.bar_chart(data.groupby('funding_year')['funding_usd'].sum().sort_values(ascending=False))
+st.bar_chart(data.groupby('funding_year')['funding_usd'].sum().sort_values(ascending=False), height=300)
 
 tab1, tab2 = st.tabs(["Ecosytem View", "Project View"])
 
@@ -169,7 +155,7 @@ with tab1:
     ecosystems_to_filter = st.multiselect('Select ecosystem(s)', data['funder_name'].unique(), data['funder_name'].unique())
     usd_to_filter = st.slider('Minimum project funding threshold (USD)', 1, 500_000, 100_000)
     round_to_filter = st.slider('Minimum project grant rounds threshold', 1, 10, 2)
-    log_scale = st.radio('Log scale', ['Yes', 'No'])
+    log_scale = st.radio('Log scale', ['No', 'Yes'])
 
     if log_scale == 'Yes':
         fund_col = 'funding_usd_log'
@@ -182,7 +168,12 @@ with tab1:
         (data['funding_event_sum'] >= round_to_filter)
     ]
 
-    fig = make_sankey_graph(df=filtered_data, value_col=fund_col)
+    st.subheader('Ecosystem funding snapshot')
+    st.caption(f'Total grant funding: ${filtered_data["funding_usd"].sum():,.0f}')
+    st.caption(f'Projects: {filtered_data["project_name_mapping"].nunique():,.0f}')
+    st.caption(f'Grant disbursements: {filtered_data["funding_event_count"].sum():,.0f}')
+
+    fig = make_sankey_graph(df=filtered_data, value_col=fund_col, height=1200)
     st.plotly_chart(fig)
 
 with tab2:
@@ -194,7 +185,7 @@ with tab2:
     st.subheader(f'Total grant funding: ${total_funding:,.0f}')
     fig = make_sankey_graph(
         df=filtered_data,
-        height=800, 
-        cat_cols=['funder_name', 'funder_round_name', 'project_name']
+        cat_cols=['funder_name', 'funder_round_name', 'project_name'],
+        height=500
     )
     st.plotly_chart(fig)
