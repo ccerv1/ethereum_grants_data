@@ -25,14 +25,17 @@ def load_data(url=DATA_URL):
     
     # Read the data from the URL
     df = pd.read_csv(url, index_col=0)
-
+    
     # Is OSS project
     df['is_oss'] = df[SLUG_COL].apply(lambda x: x is not np.nan)
 
     # Map project names to slug
     df[SLUG_COL] = df[SLUG_COL].apply(lambda x: min(x.split(','), key=len) if isinstance(x, str) else x)    
     df[SLUG_COL] = df[SLUG_COL].fillna(df[NAME_COL].apply(lambda x: x.replace(",","").replace(" ","_").lower()))
-    df['project_name_mapping'] = df[SLUG_COL].map(df.groupby(SLUG_COL)[NAME_COL].apply(lambda x: x.value_counts().idxmax()))
+    #df['project_name_mapping'] = df[SLUG_COL].map(df.groupby(SLUG_COL)[NAME_COL].apply(lambda x: x.value_counts().idxmax()))
+    project_names = pd.read_csv('project_names.csv', index_col=0)['project_name'].to_dict()
+    df['project_name_mapping'] = df.apply(lambda x: project_names.get(x[SLUG_COL], x[NAME_COL]), axis=1)
+    
     df['project_name_mapping'] = df['project_name_mapping'].apply(lambda x: x[:20] + '...' if len(x) > 20 else x)    
     df['project_name_mapping'] = df.apply(lambda x: f"{x['project_name_mapping']} (project)" if x['funder_name'] in x['project_name_mapping'] else x['project_name_mapping'], axis=1)
     df['project_name_mapping'].replace("Synpress", "Synthetix / Synpress", inplace=True)
@@ -56,10 +59,6 @@ def make_sankey_graph(
     height=1000,
     decimals=False,
     hide_label_cols=[]):
-
-    # handle empty dataframe case
-    if not len(df):
-        return {}
 
     # populate the Sankey data
     labelList = []
@@ -95,9 +94,9 @@ def make_sankey_graph(
         linkLabels += [c] * df[c].nunique()
 
     # create the Sankey diagram
-    pad = 15
-    node_thickness = 10
-    line_width = .5
+    pad = 5
+    node_thickness = 20
+    line_width = .25
     data = dict(
         type='sankey',
         orientation='h',
@@ -109,8 +108,8 @@ def make_sankey_graph(
           label=nodeLabelList,
           customdata=linkLabels,
           hovertemplate="<br>".join([
-                "<b>%{value:,.1f}</b>" if decimals else "<b>%{value:,.0f}</b>",
-                "%{customdata}: %{label}",
+                "<b>%{label}</b>",
+                "$%{value:,.2f}" if decimals else "$%{value:,.0f}"
                 "<extra></extra>"
             ])
         ),
@@ -119,9 +118,8 @@ def make_sankey_graph(
           target=sourceTargetDf['targetID'],
           value=sourceTargetDf['value'],
           hovertemplate="<br>".join([
-                "<b>%{value:,.1f}</b>" if decimals else "<b>%{value:,.0f}</b>",
-                "%{source.customdata}: %{source.label}",
-                "%{target.customdata}: %{target.label}",
+                "<b>%{source.label} -> %{target.label}</b>",
+                "$%{value:,.2f}" if decimals else "$%{value:,.0f}",
                 "<extra></extra>"
             ])
         )
@@ -138,11 +136,11 @@ st.title('Ethereum Ecosystem Grant Funding')
 
 data_load_state = st.text('Loading data...')
 data = load_data()
-data_load_state.text('Loading data...done!')
+data_load_state.text(f'Loaded {data.shape[0]:,} grant funding records.')
 
 total_funding = data['funding_usd'].sum()
 st.subheader(f'Total grant funding: ${total_funding:,.0f}')
-st.bar_chart(data.groupby('funding_year')['funding_usd'].sum().sort_values(ascending=False), height=300)
+st.bar_chart(data.groupby('funding_year')['funding_usd'].sum().sort_values(ascending=False), height=300, color='#aaa')
 
 tab1, tab2 = st.tabs(["Ecosytem View", "Project View"])
 
@@ -158,18 +156,34 @@ with tab1:
     else:
         fund_col = 'funding_usd'
 
+    st.subheader('Ecosystem funding snapshot')
+
     filtered_data = data[
         (data['funder_name'].isin(ecosystems_to_filter)) &
         (data['funding_usd_sum'] >= usd_to_filter) &
         (data['funding_event_sum'] >= round_to_filter)
     ]
-
-    st.subheader('Ecosystem funding snapshot')
-    st.caption(f'Total grant funding: ${filtered_data["funding_usd"].sum():,.0f}')
-    st.caption(f'Projects: {filtered_data["project_name_mapping"].nunique():,.0f}')
-    st.caption(f'Grant disbursements: {filtered_data["funding_event_count"].sum():,.0f}')
-
+    if filtered_data.empty:
+        st.write('No data to display. Please adjust the filters.')
+        st.stop()
+    
     fig = make_sankey_graph(df=filtered_data, value_col=fund_col, height=1200)
+    
+    annotation = "<br>".join([
+        f"<b>Total grant funding:</b> ${filtered_data['funding_usd'].sum():,.0f}",
+        f"<b>Projects:</b> {filtered_data['project_name_mapping'].nunique():,.0f}",
+        f"<b>Grant disbursements:</b> {filtered_data['funding_event_count'].sum():,.0f}"
+    ])
+    fig['layout'].update({
+        'annotations': [
+            dict(x=0, y=1,
+                showarrow=False,
+                text=annotation,
+                font=dict(size=14, color='black'),
+                align='left')
+        ]
+    })
+
     st.plotly_chart(fig)
 
 with tab2:
@@ -179,6 +193,11 @@ with tab2:
     total_funding = filtered_data['funding_usd'].sum()
     total_rounds = filtered_data['funding_event_count'].sum()
     st.subheader(f'Total grant funding: ${total_funding:,.0f}')
+
+    if len(filtered_data) > 100:
+        st.write('Too much data to display. Please use a more specific keyword.')
+        st.stop()
+    
     fig = make_sankey_graph(
         df=filtered_data,
         cat_cols=['funder_name', 'funder_round_name', 'project_name'],
