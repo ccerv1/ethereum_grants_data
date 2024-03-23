@@ -126,12 +126,15 @@ def make_sankey_graph(
     )
     layout = dict(
         font=dict(size=size), 
-        height=height
+        height=height,
+        autosize=True,
+        margin=dict(l=20, r=20, t=20, b=20)
     )
     fig = dict(data=[data], layout=layout)
     return fig
 
 
+st.set_page_config(layout="wide")
 st.title('Ethereum Ecosystem Grant Funding')
 
 data_load_state = st.text('Loading data...')
@@ -143,7 +146,6 @@ st.subheader(f'Total grant funding: ${total_funding:,.0f}')
 st.bar_chart(data.groupby('funding_year')['funding_usd'].sum().sort_values(ascending=False), height=300, color='#aaa')
 
 tab1, tab2 = st.tabs(["Ecosytem View", "Project View"])
-
 
 with tab1:
     ecosystems_to_filter = st.multiselect('Select ecosystem(s)', data['funder_name'].unique(), data['funder_name'].unique())
@@ -184,7 +186,7 @@ with tab1:
         ]
     })
 
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
     project_name = st.text_input('Project name or keyword', 'Protocol Guild')
@@ -201,6 +203,6 @@ with tab2:
     fig = make_sankey_graph(
         df=filtered_data,
         cat_cols=['funder_name', 'funder_round_name', 'project_name'],
-        height=500
+        height=600
     )
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, use_container_width=True)
