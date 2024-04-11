@@ -79,7 +79,7 @@ def ecosystem_tab():
 
 def project_tab():
 
-    project_name = st.text_input('Enter a project name or keyword', 'Protocol Guild')
+    project_name = st.text_input('Enter a project name or keyword', 'test')
     dff = data[data['project_name_mapping'].str.contains(project_name, case=False)]
     if len(dff) > 100:
         st.write('Too much data to display. Please use a more specific keyword.')
