@@ -49,7 +49,7 @@ def ecosystem_tab():
     fund_col = 'funding_usd_log' if log_scale == 'Yes' else 'funding_usd'
     
     # Apply filters
-    dfff = dff[(dff['funding_year'].isin(years_to_filter)) & (dff['funding_usd'l]>amounts_to_filter)]
+    dfff = dff[(dff['funding_year'].isin(years_to_filter)) & (dff['funding_usd']>=amounts_to_filter)]
     if dfff.empty:
         st.write('No data to display. Please adjust the filters.')
         st.stop()
