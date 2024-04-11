@@ -1,7 +1,10 @@
+from func_timeout import func_timeout, FunctionTimedOut
 import numpy as np
 import pandas as pd
 
-DATA_URL = "https://raw.githubusercontent.com/opensource-observer/oss-funding/main/funding_data.csv"
+DATA_URL = 'https://raw.githubusercontent.com/opensource-observer/oss-funding/main/funding_data.csv'
+LOCAL_PATH = 'data/funding_data.csv'
+
 SLUG_COL = 'oso_slug'
 NAME_COL = 'project_name'
 FUND_COL = 'funding_usd'
@@ -16,9 +19,23 @@ VAL_COLS = [
     'funding_event_count'
 ]
 
-def process_dataframe(url=DATA_URL):
+def fetch_data(timeout):
 
-    df = pd.read_csv(url, index_col=0)
+    def read_csv(path):
+        return pd.read_csv(path, index_col=0)
+
+    try:
+        return func_timeout(timeout, read_csv, args=(DATA_URL,))
+    except FunctionTimedOut:
+        return read_csv(LOCAL_PATH)
+    except Exception as e:
+        print(f"An error occurred: {e}.")
+        return None
+    
+
+def process_dataframe(timeout=3):
+
+    df = fetch_data(timeout)
 
     # Map project names to slug
     df[SLUG_COL] = df[SLUG_COL].apply(lambda x: min(x.split(','), key=len) if isinstance(x, str) else x)    

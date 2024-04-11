@@ -1,12 +1,47 @@
 import pandas as pd
+import plotly.express as px
+
+
+def make_barchart(
+    df, 
+    year_col='funding_year', 
+    funding_col='funding_usd', 
+    height=300):
+
+    gdf = df.groupby(year_col)[funding_col].sum().reset_index()
+    gdf['funding_usd_formatted'] = gdf[funding_col].apply(lambda x: "${:,.0f}".format(x))
+    gdf[year_col] = gdf[year_col].astype(str)
+
+    fig = px.bar(
+        gdf, 
+        x=year_col, 
+        y=funding_col,
+        text='funding_usd_formatted',
+        hover_data={funding_col: False, 'funding_usd_formatted': True}, 
+        height=height
+    )
+    fig.update_traces(
+        marker_color='teal',
+        hovertemplate='$%{y:,.0f}'
+    )
+    fig.update_layout(
+        hovermode="x unified", 
+        autosize=True,
+        margin=dict(l=20, r=20, t=50, b=20),
+        yaxis_title=None,
+        xaxis_title=None,                
+        xaxis=dict(type='category')
+    )
+
+    return fig
 
 
 def make_sankey_graph(
     df, 
     cat_cols, 
     value_col,
+    height=1200,
     size=10,
-    height=1000,
     decimals=False,
     hide_label_cols=[]):
 
@@ -80,8 +115,5 @@ def make_sankey_graph(
         autosize=True,
         margin=dict(l=20, r=20, t=20, b=20)
     )
-    fig = dict(
-        data=[data], 
-        layout=layout
-    )
+    fig = dict(data=[data], layout=layout)
     return fig

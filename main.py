@@ -1,10 +1,7 @@
-import plotly.express as px
-import plotly.graph_objects as go
-import numpy as np
 import pandas as pd
 import streamlit as st
 
-from src.sankey import make_sankey_graph
+from src.charts import make_sankey_graph, make_barchart
 from src.process import process_dataframe, CAT_COLS 
 
 
@@ -14,80 +11,108 @@ def load_data():
 
 
 st.set_page_config(layout="wide")
-st.title('Ethereum Ecosystem Grant Funding')
-
-data_load_state = st.text('Loading data...')
 data = load_data()
-data_load_state.text(f'Loaded {data.shape[0]:,} grant funding records.')
+funder_names = sorted(data['funder_name'].unique())
 
-total_funding = data['funding_usd'].sum()
-st.subheader(f'Total grant funding: ${total_funding:,.0f}')
-st.bar_chart(data.groupby('funding_year')['funding_usd'].sum().sort_values(ascending=False), height=300, color='#aaa')
 
-tab1, tab2 = st.tabs(["Ecosytem View", "Project View"])
-
-with tab1:
-
-    st.subheader('Ecosystem funding snapshot')
-    ecosystems_to_filter = st.multiselect('Select ecosystem(s)', data['funder_name'].unique(), data['funder_name'].unique())
+def ecosystem_tab():
     
-    col1, col2, col3 = st.columns([3,2,1])
+    ecosystems_to_filter = st.multiselect('Select ecosystem(s)', funder_names, funder_names)
+    dff = data[data['funder_name'].isin(ecosystems_to_filter)]
+    if dff.empty:
+        st.write('No data to display. Please adjust the filters.')
+        st.stop()
+
+    ###### Barchart ######
+
+    total_funding = dff['funding_usd'].sum()
+    st.subheader(f'💸 Total funding: ${total_funding:,.0f}')
+    
+    barchart = make_barchart(dff)
+    st.plotly_chart(barchart, use_container_width=True)
+
+
+    ###### Sankey ######
+
+    st.subheader('🔍 Allocation explorer')
+    
+    # Set additional filters    
+    col1, col2, col3, col4, col5 = st.columns([3,1,3,1,1])
     with col1: 
-        usd_to_filter = st.slider('Minimum project funding threshold (USD)', 1, 500_000, 100_000)
-    with col2:
-        round_to_filter = st.slider('Minimum project grant rounds threshold', 1, 10, 2)
+        years = sorted(dff['funding_year'].unique())
+        years_to_filter = st.multiselect('Select years(s)', years, years[-2:])
     with col3:
-        log_scale = st.radio('Log scale', ['No', 'Yes'])
+        amounts_to_filter = st.slider('Only view grants grants above...', 1, 500_000, 1000)
+    with col5:
+        log_scale = st.radio('Show log scale', ['No', 'Yes'])
 
-    if log_scale == 'Yes':
-        fund_col = 'funding_usd_log'
-    else:
-        fund_col = 'funding_usd'
+    fund_col = 'funding_usd_log' if log_scale == 'Yes' else 'funding_usd'
     
-    filtered_data = data[
-        (data['funder_name'].isin(ecosystems_to_filter)) &
-        (data['funding_usd_sum'] >= usd_to_filter) &
-        (data['funding_event_sum'] >= round_to_filter)
-    ]
-    if filtered_data.empty:
+    # Apply filters
+    dfff = dff[(dff['funding_year'].isin(years_to_filter)) & (dff[fund_col]>amounts_to_filter)]
+    if dfff.empty:
         st.write('No data to display. Please adjust the filters.')
         st.stop()
     
-    fig = make_sankey_graph(df=filtered_data, cat_cols=CAT_COLS, value_col=fund_col, height=1200)
-    
-    annotation = "<br>".join([
-        f"<b>Total grant funding:</b> ${filtered_data['funding_usd'].sum():,.0f}",
-        f"<b>Projects:</b> {filtered_data['project_name_mapping'].nunique():,.0f}",
-        f"<b>Grant disbursements:</b> {filtered_data['funding_event_count'].sum():,.0f}"
+    annotation = " | ".join([
+        f"Funding: ${dfff['funding_usd'].sum():,.0f}",
+        f"Rounds: {dfff[CAT_COLS[-2]].nunique():,.0f}",
+        f"Projects: {dfff[CAT_COLS[-1]].nunique():,.0f}",
+        f"Awards: {len(dfff):,.0f}"
     ])
-    fig['layout'].update({
-        'annotations': [
-            dict(x=0, y=1,
-                showarrow=False,
-                text=annotation,
-                font=dict(size=14),
-                align='left')
-        ]
-    })
+    st.write(annotation)
 
-    st.plotly_chart(fig, use_container_width=True)
+    sankey = make_sankey_graph(
+        df=dfff,
+        cat_cols=CAT_COLS,
+        value_col=fund_col
+    )
+    st.plotly_chart(sankey, use_container_width=True)
 
-with tab2:
-    project_name = st.text_input('Project name or keyword', 'Protocol Guild')
-    filtered_data = data[data['project_name_mapping'].str.contains(project_name, case=False)]
 
-    total_funding = filtered_data['funding_usd'].sum()
-    total_rounds = filtered_data['funding_event_count'].sum()
-    st.subheader(f'Total grant funding: ${total_funding:,.0f}')
+def project_tab():
 
-    if len(filtered_data) > 100:
+    project_name = st.text_input('Enter a project name or keyword', 'Protocol Guild')
+    dff = data[data['project_name_mapping'].str.contains(project_name, case=False)]
+    if len(dff) > 100:
         st.write('Too much data to display. Please use a more specific keyword.')
         st.stop()
+
     
-    fig = make_sankey_graph(
-        df=filtered_data,
+    ###### Barchart ######
+
+    total_funding = dff['funding_usd'].sum()
+    st.subheader(f'💸 Total funding: ${total_funding:,.0f}')
+    barchart = make_barchart(dff)
+    st.plotly_chart(barchart, use_container_width=True)
+    
+    
+    ###### Sankey ######
+
+    st.subheader('🔍 Allocation explorer')
+
+    sankey = make_sankey_graph(
+        df=dff,
         value_col='funding_usd',
         cat_cols=['funder_name', 'funder_round_name', 'project_name'],
         height=600
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(sankey, use_container_width=True)
+
+
+###### Main ######
+
+st.title('Grants on Ethereum')
+text = " ".join([
+        '🏗️',
+        f'Dataset currently covers a total of {len(data):,.0f}',
+        f'disbursements from {len(funder_names)} grant programs.',
+        'Help us add to it [here](https://github.com/opensource-observer/oss-funding)!'
+    ])
+st.write(text)
+
+tab1, tab2 = st.tabs(["Ecosytem View", "Project View"])
+with tab1:
+    ecosystem_tab()
+with tab2:
+    project_tab()
